@@ -1,6 +1,6 @@
 # firstly
 
-A new Flutter project.
+Flutter app for controlling smart kitchen scales connected via BLE to an ESP32 microcontroller. Features real-time weight monitoring across 4 sensors, user profile management, favorite recipes, and persistent data synchronization.
 
 ## Getting Started
 
