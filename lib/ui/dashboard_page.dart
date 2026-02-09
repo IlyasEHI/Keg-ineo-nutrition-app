@@ -963,6 +963,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                   ),
                                 ),
                               );
+                              // Mettre à jour les LEDs avec les nouveaux seuils
+                              _sendLedColors();
                             },
                             child: const Text('Enregistrer'),
                           ),
@@ -1046,8 +1048,36 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       debugPrint(
         '✅ BLE OK => A:${map[Pad.A]} B:${map[Pad.B]} C:${map[Pad.C]} D:${map[Pad.D]} battery:${battery ?? "?"}',
       );
+
+      // Envoyer les couleurs LED vers l'ESP32
+      _sendLedColors();
     } catch (e) {
       debugPrint('❌ BLE JSON ERROR: $e | raw=$raw');
+    }
+  }
+
+  // Extrait R,G,B d'une couleur Material et les envoie à l'ESP32
+  void _sendLedColors() {
+    if (!_bleConnected) return;
+
+    final weights = ref.read(padsProvider);
+    final cfgs = ref.read(padsConfigProvider);
+
+    for (final pad in Pad.values) {
+      final grams = weights[pad] ?? 0;
+      final c = cfgs[pad] ?? const PadConfig();
+      final color = _borderColorFor(grams, c);
+
+      // Extraire R, G, B de la couleur (format 0xAARRGGBB)
+      final argb = color.value;
+      final r = (argb >> 16) & 0xFF;
+      final g = (argb >> 8) & 0xFF;
+      final b = argb & 0xFF;
+
+      // Format: L,A,255,128,0\n pour envoyer LED du tapis A en orange
+      final cmd = 'L,${pad.name},$r,$g,$b\n';
+      _bleConnector.sendCommand(cmd);
+      debugPrint('💡 LED cmd => $cmd');
     }
   }
 
@@ -1090,6 +1120,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ScaffoldMessenger.of(
         ctx,
       ).showSnackBar(SnackBar(content: Text('OK: $pad -> $grams g')));
+      // Mettre à jour les LEDs
+      _sendLedColors();
       return;
     }
 
@@ -1113,6 +1145,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ScaffoldMessenger.of(
         ctx,
       ).showSnackBar(SnackBar(content: Text('Tare sur $pad')));
+      // Mettre à jour les LEDs
+      _sendLedColors();
       return;
     }
 
