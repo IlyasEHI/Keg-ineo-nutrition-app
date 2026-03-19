@@ -142,7 +142,9 @@ class RecipesSheet extends ConsumerWidget {
                         ...r.steps.asMap().entries.map(
                           (e) => Padding(
                             padding: const EdgeInsets.only(top: 4),
-                            child: Text('${e.key + 1}. ${e.value}'),
+                            child: Text(
+                              '${e.key + 1}. ${e.value.replaceFirst(RegExp(r'^\s*\d+\s*[\.)\-:]\s*'), '')}',
+                            ),
                           ),
                         ),
                         if (r.nutritionalInfo != null) ...[
@@ -201,18 +203,27 @@ class RecipesSheet extends ConsumerWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
+  static const String _serviceUuidStr = '6b8a2b7c-52ce-4c4b-9f3a-7d4c6c8f9a12';
+  static const String _notifyUuidStr = 'f2c4a1de-0c9a-4e2b-9d6f-6a8b1c3d5e78';
+  static const String _writeUuidStr = 'b3f1d7a6-4c2e-4bb1-8b0b-2a6c7d9e1f34';
+
   final _injectCtrl = TextEditingController();
   final _favoritesSearchCtrl = TextEditingController();
   String _favoritesSearch = '';
   List<Recipe>? _lastRecipes;
   final BleDeviceConnector _bleConnector = BleDeviceConnector();
-  bool _bleConnected = false;
+  bool _isGattConnected = false;
+  bool _isNotifySubscribed = false;
   String _lastBleMessage = '';
-  DateTime? _lastBleTs;
+  DateTime? _lastNotifyAt;
+  int? _batteryPercent;
   int _bleDeltaMs = 0;
   String? _connectedDeviceId;
   Uuid? _connectedServiceId;
   Uuid? _connectedCharId;
+  final Map<Pad, int> _tareOffsets = {for (final p in Pad.values) p: 0};
+  final Map<Pad, bool> _tareActive = {for (final p in Pad.values) p: false};
+  int _recipeServings = 4;
   // contrôleurs texte pour le nom d’ingrédient de chaque plateau
   late final Map<Pad, TextEditingController> _nameCtrls;
   int _currentTabIndex = 0;
@@ -547,7 +558,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                                   top: 4,
                                                 ),
                                                 child: Text(
-                                                  '${e.key + 1}. ${e.value}',
+                                                  '${e.key + 1}. ${e.value.replaceFirst(RegExp(r'^\s*\d+\s*[\.)\-:]\s*'), '')}',
                                                   style: const TextStyle(
                                                     fontSize: 14,
                                                   ),
@@ -784,7 +795,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   void dispose() {
-    _bleConnected = false;
+    _isGattConnected = false;
+    _isNotifySubscribed = false;
     _lastBleMessage = '';
     _injectCtrl.dispose();
     _favoritesSearchCtrl.dispose();
@@ -793,6 +805,165 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     }
     _bleConnector.dispose();
     super.dispose();
+  }
+
+  Future<void> _scanAndConnectBle(BuildContext context) async {
+    final ok = await ensureBlePermissions();
+    if (!ok || !mounted) return;
+
+    final devices = await BleScanner().quickScan();
+    if (!mounted) return;
+
+    final filteredDevices = _preferredBleDevices(devices);
+
+    if (filteredDevices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun périphérique BLE trouvé.')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Périphériques trouvés'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: filteredDevices.length,
+            itemBuilder: (_, i) {
+              final d = filteredDevices[i];
+              final name = d.name.isEmpty ? '(sans nom)' : d.name;
+
+              return ListTile(
+                title: Text(name),
+                subtitle: Text(d.id),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _connectBleDevice(context, d);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<DiscoveredDevice> _preferredBleDevices(List<DiscoveredDevice> devices) {
+    final kebIneoNamed = devices
+        .where((d) => d.name.toUpperCase().startsWith('KEGINEO-'))
+        .toList();
+    if (kebIneoNamed.isNotEmpty) {
+      return kebIneoNamed;
+    }
+
+    // Fallback: remove unnamed devices when we have at least one named device.
+    final named = devices.where((d) => d.name.trim().isNotEmpty).toList();
+    if (named.isNotEmpty) {
+      return named;
+    }
+
+    return devices;
+  }
+
+  Future<void> _connectBleDevice(
+    BuildContext context,
+    DiscoveredDevice device,
+  ) async {
+    final name = device.name.isEmpty ? '(sans nom)' : device.name;
+    final serviceUuid = Uuid.parse(_serviceUuidStr);
+    final txNotifyUuid = Uuid.parse(_notifyUuidStr);
+    final rxWriteUuid = Uuid.parse(_writeUuidStr);
+
+    setState(() {
+      _connectedDeviceId = device.id;
+      _connectedServiceId = serviceUuid;
+      _connectedCharId = txNotifyUuid;
+      _isGattConnected = false;
+      _isNotifySubscribed = false;
+      _lastBleMessage = '';
+      _lastNotifyAt = null;
+      _bleDeltaMs = 0;
+    });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Connexion à $name...')));
+    debugPrint('🔍 BLE UI: trying device name=$name id=${device.id}');
+
+    await _bleConnector.connectAndListen(
+      deviceId: device.id,
+      serviceId: serviceUuid,
+      txNotifyCharId: txNotifyUuid,
+      rxWriteCharId: rxWriteUuid,
+      onLine: (raw) {
+        if (!mounted) return;
+
+        final now = DateTime.now();
+        final delta = _lastNotifyAt == null
+            ? 0
+            : now.difference(_lastNotifyAt!).inMilliseconds;
+
+        setState(() {
+          _isNotifySubscribed = true;
+          _lastBleMessage = raw;
+          _lastNotifyAt = now;
+          _bleDeltaMs = delta;
+        });
+
+        debugPrint('📲 BLE UI notify received (Δ ${_bleDeltaMs} ms)');
+
+        _handleBleJson(raw);
+      },
+      onConnection: (connected) {
+        if (!mounted) return;
+        setState(() {
+          _isGattConnected = connected;
+          if (!connected) {
+            _isNotifySubscribed = false;
+          }
+        });
+        debugPrint('🔗 BLE UI gatt state => $connected');
+      },
+      onError: (e) {
+        debugPrint(
+          '❌ BLE UI error: $e | gatt=$_isGattConnected notify=$_isNotifySubscribed',
+        );
+      },
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Connecté à $name. En attente des données...')),
+    );
+  }
+
+  Future<void> _disconnectBle(BuildContext context) async {
+    await _bleConnector.disconnect();
+    if (!mounted) return;
+
+    setState(() {
+      _isGattConnected = false;
+      _isNotifySubscribed = false;
+      _lastBleMessage = '';
+      _lastNotifyAt = null;
+      _bleDeltaMs = 0;
+      _connectedDeviceId = null;
+      _connectedServiceId = null;
+      _connectedCharId = null;
+    });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Déconnexion BLE effectuée.')));
   }
 
   // met à jour un poids (via +/−) et ajuste l’état "taré" (LED verte si 0 g)
@@ -821,10 +992,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     bool changed = false;
     final next = Map<Pad, PadConfig>.from(cfgs);
     for (final pad in Pad.values) {
-      final g = weights[pad] ?? 0;
       final c = next[pad] ?? const PadConfig();
-      if (g == 0 && !c.tared) {
-        next[pad] = c.copyWith(tared: true);
+      final shouldBeTared = _tareActive[pad] ?? false;
+      if (c.tared != shouldBeTared) {
+        next[pad] = c.copyWith(tared: shouldBeTared);
         changed = true;
       }
     }
@@ -840,6 +1011,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final current = ref.read(padsConfigProvider.notifier).state;
     final next = <Pad, PadConfig>{};
     for (final p in Pad.values) {
+      _tareOffsets[p] = 0;
+      _tareActive[p] = true;
       final cfg = current[p] ?? const PadConfig();
       next[p] = cfg.copyWith(name: '', tared: true);
     }
@@ -1003,7 +1176,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   // Parse un JSON BLE {"z1":..., "z2":..., "z3":..., "z4":..., "battery":...}
-  // et met à jour les 4 tapis en ignorant la batterie.
+  // et met à jour les 4 tapis + la batterie.
   void _handleBleJson(String raw) {
     debugPrint('🔹 BLE RAW => $raw');
 
@@ -1031,22 +1204,51 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         map[Pad.D] = _num(decoded['z4']);
       }
 
+      if (decoded.containsKey('battery')) {
+        final nextBattery = _num(decoded['battery']).clamp(0, 100);
+        if (_batteryPercent != nextBattery) {
+          setState(() {
+            _batteryPercent = nextBattery;
+          });
+        }
+      }
+
       if (map.isEmpty) {
-        debugPrint('⚠️ BLE: no valid zones detected');
+        debugPrint(
+          'ℹ️ BLE: packet without zone update (battery only or metadata)',
+        );
         return;
       }
 
-      // update padsProvider
+      // Applique l'offset de tare par tapis avant affichage.
       ref.read(padsProvider.notifier).update((current) {
         final next = Map<Pad, int>.from(current);
-        next.addAll(map);
+        map.forEach((pad, rawValue) {
+          final offset = _tareOffsets[pad] ?? 0;
+          next[pad] = rawValue + offset;
+        });
         return next;
       });
 
+      // Le flag tared reflète désormais l'existence d'un offset actif.
+      final cfgCurrent = ref.read(padsConfigProvider.notifier).state;
+      final cfgNext = Map<Pad, PadConfig>.from(cfgCurrent);
+      bool cfgChanged = false;
+      for (final pad in map.keys) {
+        final conf = cfgNext[pad] ?? const PadConfig();
+        final shouldBeTared = _tareActive[pad] ?? false;
+        if (conf.tared != shouldBeTared) {
+          cfgNext[pad] = conf.copyWith(tared: shouldBeTared);
+          cfgChanged = true;
+        }
+      }
+      if (cfgChanged) {
+        ref.read(padsConfigProvider.notifier).state = cfgNext;
+      }
+
       debugPrint('✅ BLE parsed OK: ${map.length} values updated');
-      final battery = (decoded['battery'] as num?)?.round();
       debugPrint(
-        '✅ BLE OK => A:${map[Pad.A]} B:${map[Pad.B]} C:${map[Pad.C]} D:${map[Pad.D]} battery:${battery ?? "?"}',
+        '✅ BLE OK => A:${map[Pad.A]} B:${map[Pad.B]} C:${map[Pad.C]} D:${map[Pad.D]} battery:${_batteryPercent ?? "?"}',
       );
 
       // Envoyer les couleurs LED vers l'ESP32
@@ -1058,7 +1260,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   // Extrait R,G,B d'une couleur Material et les envoie à l'ESP32
   void _sendLedColors() {
-    if (!_bleConnected) return;
+    if (!_isGattConnected) return;
 
     final weights = ref.read(padsProvider);
     final cfgs = ref.read(padsConfigProvider);
@@ -1110,11 +1312,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         next[pad] = grams.clamp(0, 2000);
         return next;
       });
-      // LED taré = true si 0 g
+      // En mode debug W, on repart sur une valeur absolue (offset retiré).
+      _tareOffsets[pad] = 0;
+      _tareActive[pad] = false;
       final currentConfig = ref.read(padsConfigProvider.notifier).state;
       final nextConfig = Map<Pad, PadConfig>.from(currentConfig);
       nextConfig[pad] = (nextConfig[pad] ?? const PadConfig()).copyWith(
-        tared: grams == 0,
+        tared: false,
       );
       ref.read(padsConfigProvider.notifier).state = nextConfig;
       ScaffoldMessenger.of(
@@ -1133,6 +1337,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         );
         return;
       }
+      final currentWeights = ref.read(padsProvider);
+      final currentDisplayed = currentWeights[pad] ?? 0;
+
+      // Tare persistante: on ajuste l'offset pour que la valeur courante devienne 0.
+      _tareOffsets[pad] = (_tareOffsets[pad] ?? 0) - currentDisplayed;
+      _tareActive[pad] = true;
+
       ref.read(padsProvider.notifier).update((current) {
         final next = Map<Pad, int>.from(current);
         next[pad] = 0;
@@ -1157,8 +1368,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   // couleur du contour en fonction des seuils
   Color _borderColorFor(int grams, PadConfig c) {
-    if (grams == 0 || c.tared)
-      return const Color(0xFFB0BEC5); // blanc/gris clair pour 0g ou taré
+    if (grams == 0) return const Color(0xFFB0BEC5); // gris clair à 0g
     if (grams < c.seuilBas) return const Color(0xFFC62828); // rouge pro
     if (grams < c.seuilMoyen) return const Color(0xFFEF6C00); // orange soutenu
     if (grams <= c.seuilHaut) return const Color(0xFF43A047); // vert plus clair
@@ -1168,6 +1378,24 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   // LED (taré)
   Color _ledColor(bool tared) =>
       tared ? const Color(0xFF43A047) : const Color(0xFF78909C);
+
+  IconData _batteryIconFor(int? percent) {
+    final p = percent ?? 0;
+    if (p >= 90) return Icons.battery_full;
+    if (p >= 70) return Icons.battery_6_bar;
+    if (p >= 50) return Icons.battery_5_bar;
+    if (p >= 30) return Icons.battery_3_bar;
+    if (p >= 15) return Icons.battery_2_bar;
+    return Icons.battery_alert;
+  }
+
+  Color _batteryColorFor(int? percent) {
+    final p = percent ?? 0;
+    if (p >= 50) return const Color(0xFF2E7D32);
+    if (p >= 20) return const Color(0xFFEF6C00);
+    return const Color(0xFFC62828);
+  }
+
   List<IngredientStock> _buildStock(
     Map<Pad, int> weights,
     Map<Pad, PadConfig> cfgs,
@@ -1210,87 +1438,27 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       appBar: AppBar(
         title: const Text('KEG\'INEO – Dashboard'),
         actions: [
-          IconButton(
-            tooltip: 'Scanner BLE',
-            icon: const Icon(Icons.radar),
-            onPressed: () async {
-              final ok = await ensureBlePermissions();
-              if (!ok || !mounted) return;
-
-              final devices = await BleScanner().quickScan();
-              if (devices.isEmpty) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Aucun appareil trouvé')),
-                  );
-                }
-                return;
-              }
-
-              if (!mounted) return;
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Périphériques trouvés'),
-                  content: ListView.builder(
-                    itemCount: devices.length,
-                    itemBuilder: (_, i) {
-                      final d = devices[i];
-                      return ListTile(
-                        title: Text(d.name.isEmpty ? '(sans nom)' : d.name),
-                        subtitle: Text(d.id),
-                        onTap: () async {
-                          Navigator.of(ctx).pop();
-
-                          final serviceUuid = Uuid.parse(
-                            '6b8a2b7c-52ce-4c4b-9f3a-7d4c6c8f9a12',
-                          );
-                          // Un seul characteristic fourni par Barnabé: on l'utilise pour notify ET write
-                          final charUuid = Uuid.parse(
-                            'f2c4a1de-0c9a-4e2b-9d6f-6a8b1c3d5e78',
-                          );
-
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Connexion à ${d.name}...')),
-                          );
-
-                          await _bleConnector.connectAndListen(
-                            deviceId: d.id,
-                            serviceId: serviceUuid,
-                            // Utilise la même characteristic pour notify et write
-                            txNotifyCharId: charUuid,
-                            rxWriteCharId: charUuid,
-                            onLine: (raw) {
-                              if (!mounted) return;
-                              setState(() {
-                                _bleConnected = true;
-                                _lastBleMessage = raw;
-                              });
-                              _handleBleJson(raw);
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Fermer'),
-                    ),
-                  ],
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _batteryIconFor(_batteryPercent),
+                  color: _batteryColorFor(_batteryPercent),
                 ),
-              );
-            },
+                const SizedBox(width: 4),
+                Text(
+                  '${_batteryPercent ?? '--'}%',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
         ],
       ),
 
-      body: Padding(
-        padding: const EdgeInsets.only(top: 80),
-        child: _buildCurrentTabBody(weights, cfgs, theme, cs, isDark, recap),
-      ),
+      body: _buildCurrentTabBody(weights, cfgs, theme, cs, isDark, recap),
 
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -1461,6 +1629,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 final g = weights[pad] ?? 0;
                 final c = cfgs[pad] ?? const PadConfig();
                 final borderColor = _borderColorFor(g, c);
+                final isPadTared = _tareActive[pad] ?? false;
 
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
@@ -1507,13 +1676,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                               width: 16,
                               height: 16,
                               decoration: BoxDecoration(
-                                color: _ledColor(c.tared),
+                                color: _ledColor(isPadTared),
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: _ledColor(c.tared).withOpacity(0.8),
-                                    blurRadius: c.tared ? 10 : 4,
-                                    spreadRadius: c.tared ? 2 : 0,
+                                    color: _ledColor(
+                                      isPadTared,
+                                    ).withOpacity(0.8),
+                                    blurRadius: isPadTared ? 10 : 4,
+                                    spreadRadius: isPadTared ? 2 : 0,
                                   ),
                                 ],
                               ),
@@ -1791,6 +1962,70 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
             const SizedBox(height: 24),
 
+            // 🔹 Nombre de personnes (portion cible)
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [const Color(0xFF16212E), const Color(0xFF101A25)]
+                      : [const Color(0xFFEAF3F7), const Color(0xFFF4F8FB)],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF2E4053)
+                      : const Color(0xFFB8C8D6),
+                  width: 1.2,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.people_alt_outlined, color: cs.primary),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Nombre de personnes',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Diminuer',
+                    onPressed: _recipeServings > 1
+                        ? () {
+                            setState(() {
+                              _recipeServings -= 1;
+                            });
+                          }
+                        : null,
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  Text(
+                    '$_recipeServings',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Augmenter',
+                    onPressed: _recipeServings < 20
+                        ? () {
+                            setState(() {
+                              _recipeServings += 1;
+                            });
+                          }
+                        : null,
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
             // 🔹 Boutons de recettes modernes avec gradient
             Container(
               width: double.infinity,
@@ -1868,6 +2103,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       final recipes = await service.suggestRecipes(
                         stock,
                         profileDescription: combinedDescription,
+                        servings: _recipeServings,
                       );
 
                       if (!mounted) return;
@@ -2531,138 +2767,23 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       child: FilledButton.icon(
                         icon: const Icon(Icons.radar),
                         label: const Text('Scanner & se connecter'),
-                        onPressed: () async {
-                          final ok = await ensureBlePermissions();
-                          if (!ok || !mounted) return;
-
-                          final devices = await BleScanner().quickScan();
-                          if (!mounted) return;
-
-                          if (devices.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Aucun périphérique BLE trouvé.'),
-                              ),
-                            );
-                            return;
-                          }
-
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Périphériques trouvés'),
-                              content: SizedBox(
-                                width: double.maxFinite,
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  itemCount: devices.length,
-                                  itemBuilder: (_, i) {
-                                    final d = devices[i];
-                                    final name = d.name.isEmpty
-                                        ? '(sans nom)'
-                                        : d.name;
-
-                                    return ListTile(
-                                      title: Text(name),
-                                      subtitle: Text(d.id),
-                                      onTap: () async {
-                                        Navigator.of(ctx).pop();
-
-                                        final serviceUuid = Uuid.parse(
-                                          '6b8a2b7c-52ce-4c4b-9f3a-7d4c6c8f9a12',
-                                        );
-                                        final txNotifyUuid = Uuid.parse(
-                                          'f2c4a1de-0c9a-4e2b-9d6f-6a8b1c3d5e78',
-                                        );
-                                        final rxWriteUuid = Uuid.parse(
-                                          'b3f1d7a6-4c2e-4bb1-8b0b-2a6c7d9e1f34',
-                                        );
-
-                                        setState(() {
-                                          _connectedDeviceId = d.id;
-                                          _connectedServiceId = serviceUuid;
-                                          _connectedCharId = txNotifyUuid;
-                                          _bleConnected = false;
-                                          _lastBleMessage = '';
-                                          _lastBleTs = null;
-                                          _bleDeltaMs = 0;
-                                        });
-
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Connexion à $name...',
-                                            ),
-                                          ),
-                                        );
-
-                                        await _bleConnector.connectAndListen(
-                                          deviceId: d.id,
-                                          serviceId: serviceUuid,
-                                          txNotifyCharId: txNotifyUuid,
-                                          rxWriteCharId: rxWriteUuid,
-                                          onLine: (raw) {
-                                            if (!mounted) return;
-
-                                            final now = DateTime.now();
-                                            final delta = _lastBleTs == null
-                                                ? 0
-                                                : now
-                                                      .difference(_lastBleTs!)
-                                                      .inMilliseconds;
-
-                                            setState(() {
-                                              _bleConnected = true;
-                                              _lastBleMessage = raw;
-                                              _lastBleTs = now;
-                                              _bleDeltaMs = delta;
-                                            });
-
-                                            _handleBleJson(raw);
-                                          },
-                                          onConnection: (connected) {
-                                            if (!mounted) return;
-                                            setState(() {
-                                              _bleConnected = connected;
-                                            });
-                                          },
-                                          onError: (e) {
-                                            debugPrint('❌ BLE error: $e');
-                                          },
-                                        );
-
-                                        if (!mounted) return;
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Connecté à $name. En attente des données...',
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
-                                ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(),
-                                  child: const Text('Fermer'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                        onPressed: () => _scanAndConnectBle(context),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.link_off),
+                        label: const Text('Déconnecter'),
+                        onPressed: _isGattConnected
+                            ? () => _disconnectBle(context)
+                            : null,
                       ),
                     ),
                     const Divider(height: 1),
                     Card(
                       margin: const EdgeInsets.all(12),
-                      color: _bleConnected
+                      color: _isGattConnected
                           ? Colors.green.shade50
                           : Colors.red.shade50,
                       child: Padding(
@@ -2673,25 +2794,35 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             Row(
                               children: [
                                 Icon(
-                                  _bleConnected
+                                  _isGattConnected
                                       ? Icons.check_circle
                                       : Icons.error,
-                                  color: _bleConnected
+                                  color: _isGattConnected
                                       ? Colors.green
                                       : Colors.red,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  _bleConnected ? 'Connecté' : 'Déconnecté',
+                                  _isGattConnected ? 'Connecté' : 'Déconnecté',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: _bleConnected
+                                    color: _isGattConnected
                                         ? Colors.green
                                         : Colors.red,
                                   ),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Notify: ${_isNotifySubscribed ? 'actif' : 'en attente'}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            if (_lastNotifyAt != null)
+                              Text(
+                                'Dernière trame: ${_lastNotifyAt!.toIso8601String()} (Δ ${_bleDeltaMs} ms)',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                             if (_lastBleMessage.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Text(

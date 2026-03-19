@@ -20,6 +20,7 @@ class BleDeviceConnector {
 
   // Buffer pour JSON fragmenté
   final StringBuffer _rxBuffer = StringBuffer();
+  int _notifyPacketCount = 0;
 
   Future<void> connectAndListen({
     required String deviceId,
@@ -30,6 +31,9 @@ class BleDeviceConnector {
     void Function(bool connected)? onConnection,
     void Function(Object e)? onError,
   }) async {
+    debugPrint(
+      '🔌 BLE connectAndListen start device=$deviceId service=$serviceId notify=$txNotifyCharId write=$rxWriteCharId',
+    );
     await disconnect();
 
     _deviceId = deviceId;
@@ -43,9 +47,13 @@ class BleDeviceConnector {
         )
         .listen(
           (update) async {
+            debugPrint('🔄 BLE state update: ${update.connectionState}');
+
             if (update.connectionState == DeviceConnectionState.connected) {
               _connected = true;
+              _notifyPacketCount = 0;
               onConnection?.call(true);
+              debugPrint('✅ BLE GATT connected, preparing notify subscription');
 
               // Android: petit délai avant discover/CCCD
               await Future.delayed(const Duration(milliseconds: 400));
@@ -56,17 +64,29 @@ class BleDeviceConnector {
                 characteristicId: txNotifyCharId,
               );
 
+              debugPrint(
+                '📡 BLE subscribeToCharacteristic device=${qTx.deviceId} service=${qTx.serviceId} char=${qTx.characteristicId}',
+              );
+
               _notifySub = _ble
                   .subscribeToCharacteristic(qTx)
                   .listen(
                     (data) {
                       if (data.isEmpty) return;
+                      _notifyPacketCount += 1;
+                      if (_notifyPacketCount == 1) {
+                        debugPrint(
+                          '📥 BLE first notify packet received (${data.length} bytes)',
+                        );
+                      }
                       final chunk = utf8.decode(data, allowMalformed: true);
                       _rxBuffer.write(chunk);
                       _extractJsonObjects(onLine);
                     },
                     onError: (e) {
-                      debugPrint('❌ BLE notify error: $e');
+                      debugPrint(
+                        '❌ BLE notify error: $e | connected=$_connected | packets=$_notifyPacketCount',
+                      );
                       onError?.call(e);
                     },
                   );
@@ -74,11 +94,13 @@ class BleDeviceConnector {
 
             if (update.connectionState == DeviceConnectionState.disconnected) {
               _connected = false;
+              debugPrint('⛔ BLE GATT disconnected');
               onConnection?.call(false);
             }
           },
           onError: (e) {
             _connected = false;
+            debugPrint('❌ BLE connection stream error: $e');
             onConnection?.call(false);
             onError?.call(e);
           },
@@ -126,6 +148,7 @@ class BleDeviceConnector {
   }
 
   Future<void> disconnect() async {
+    debugPrint('🔌 BLE disconnect() called');
     await _notifySub?.cancel();
     await _connectionSub?.cancel();
     _notifySub = null;
@@ -135,6 +158,7 @@ class BleDeviceConnector {
     _deviceId = null;
     _serviceId = null;
     _rxWriteCharId = null;
+    _notifyPacketCount = 0;
 
     _rxBuffer.clear();
   }

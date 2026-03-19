@@ -8,7 +8,7 @@ class PadConfig {
 
   const PadConfig({
     this.name = '',
-    this.tared = true,
+    this.tared = false,
     this.seuilBas = 50,
     this.seuilMoyen = 100,
     this.seuilHaut = 150,

@@ -20,6 +20,7 @@ class RecipeService {
   Future<List<Recipe>> suggestRecipes(
     List<IngredientStock> stock, {
     String? profileDescription,
+    int servings = 4,
   }) async {
     if (stock.isEmpty) return [];
 
@@ -46,6 +47,9 @@ $stockText
 
 🎯 OBJECTIF PRINCIPAL : Utilise le MAXIMUM de quantité possible de chaque ingrédient disponible pour minimiser le gaspillage.
 
+👥 NOMBRE DE PERSONNES CIBLE : $servings
+Les recettes doivent être dimensionnées pour exactement $servings personne(s). Ajuste les portions et les quantités en conséquence.
+
 📋 INSTRUCTIONS DÉTAILLÉES :
 1. Propose exactement 3 recettes complètes et détaillées
 2. Pour CHAQUE recette, utilise autant d'ingrédients que possible EN GRANDE QUANTITÉ
@@ -54,6 +58,7 @@ $stockText
 5. Inclus des conseils de chef, astuces, temps de cuisson précis
 6. Ajoute une ESTIMATION DU TEMPS DE PRÉPARATION total (préparation + cuisson)
 7. Ajoute une section complète de valeurs nutritionnelles à la fin
+8. Le nombre de portions final doit correspondre à $servings personne(s)
 
 📊 VALEURS NUTRITIONNELLES OBLIGATOIRES (pour la portion totale) :
 - Calories (kcal)
@@ -88,7 +93,7 @@ Répond STRICTEMENT en JSON, sans texte autour, du type :
         "2. Deuxième étape très détaillée avec conseils de chef...",
         "[...] minimum 8-12 étapes détaillées NUMÉROTÉES (format: 1. , 2. , 3. , etc.)"
       ],
-      "nutritional_info": "Valeurs nutritionnelles (pour 4 portions) : Calories: 450 kcal | Protéines: 25g | Glucides: 58g | Lipides: 12g | Fibres: 8g | Sucres: 6g | Sel: 850mg"
+      "nutritional_info": "Valeurs nutritionnelles (pour $servings portions) : Calories: 450 kcal | Protéines: 25g | Glucides: 58g | Lipides: 12g | Fibres: 8g | Sucres: 6g | Sel: 850mg"
     }
   ]
 }
