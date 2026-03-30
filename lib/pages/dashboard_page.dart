@@ -1,3 +1,4 @@
+// Correction finale Mon Mar 30 22:43:04 UTC 2026
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/pad.dart';
@@ -13,6 +14,7 @@ import '../ble/ble_scan.dart';
 import '../models/ingredient_stock.dart';
 import '../models/recipe.dart';
 import '../utils/favorites_storage.dart';
+import "package:shared_preferences/shared_preferences.dart";
 import 'dart:convert';
 import '../services/recipe_service.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
@@ -929,7 +931,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       Switch(
                         value: ref.watch(themeProvider),
                         onChanged: (newValue) {
-                          ref.read(themeProvider.notifier).state = newValue;
+                          ref.read(themeProvider.notifier).theme = newValue;
                         },
                       ),
                     ],
@@ -1746,7 +1748,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     Switch(
                       value: theme.brightness == Brightness.dark,
                       onChanged: (v) {
-                        ref.read(themeProvider.notifier).state = v;
+                        ref.read(themeProvider.notifier).theme = v;
                       },
                     ),
                   ],

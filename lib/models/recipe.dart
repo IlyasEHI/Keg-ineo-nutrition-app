@@ -1,31 +1,25 @@
-// lib/models/recipe.dart
-
 class Recipe {
   final String title;
   final List<String> ingredients;
   final List<String> steps;
-  final String? nutritionalInfo;
   final String? preparationTime;
+  final String? nutritionalInfo;
 
   Recipe({
     required this.title,
     required this.ingredients,
     required this.steps,
-    this.nutritionalInfo,
     this.preparationTime,
+    this.nutritionalInfo,
   });
 
   factory Recipe.fromJson(Map<String, dynamic> json) {
     return Recipe(
-      title: json['title'] as String? ?? 'Recette sans titre',
-      ingredients: (json['ingredients'] as List<dynamic>? ?? [])
-          .map((e) => e.toString())
-          .toList(),
-      steps: (json['steps'] as List<dynamic>? ?? [])
-          .map((e) => e.toString())
-          .toList(),
-      nutritionalInfo: json['nutritional_info'] as String?,
-      preparationTime: json['preparation_time'] as String?,
+      title: json['title'],
+      ingredients: List<String>.from(json['ingredients']),
+      steps: List<String>.from(json['steps']),
+      preparationTime: json['preparationTime'],
+      nutritionalInfo: json['nutritionalInfo'],
     );
   }
 
@@ -33,7 +27,7 @@ class Recipe {
     'title': title,
     'ingredients': ingredients,
     'steps': steps,
-    if (nutritionalInfo != null) 'nutritional_info': nutritionalInfo,
-    if (preparationTime != null) 'preparation_time': preparationTime,
+    'preparationTime': preparationTime,
+    'nutritionalInfo': nutritionalInfo,
   };
 }
