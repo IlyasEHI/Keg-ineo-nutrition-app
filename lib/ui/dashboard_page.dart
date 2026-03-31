@@ -152,10 +152,10 @@ class RecipesSheet extends ConsumerWidget {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
+                              color: Colors.green.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: Colors.green.withOpacity(0.3),
+                                color: Colors.green.withValues(alpha: 0.3),
                                 width: 1,
                               ),
                             ),
@@ -572,13 +572,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                                   12,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.green
-                                                      .withOpacity(0.1),
+color: Colors.green.withValues(alpha: 0.1),
                                                   borderRadius:
                                                       BorderRadius.circular(8),
                                                   border: Border.all(
                                                     color: Colors.green
-                                                        .withOpacity(0.3),
+                                                        .withValues(alpha: 0.3),
                                                     width: 1,
                                                   ),
                                                 ),
@@ -1472,8 +1471,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           boxShadow: [
             BoxShadow(
               color: isDark
-                  ? Colors.black.withOpacity(0.35)
-                  : Colors.black.withOpacity(0.08),
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : Colors.black.withValues(alpha: 0.08),
               blurRadius: 20,
               offset: const Offset(0, -5),
             ),
@@ -1576,19 +1575,19 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   end: Alignment.bottomRight,
                   colors: isDark
                       ? [
-                          const Color(0xFF7C4DFF).withOpacity(0.2),
-                          const Color(0xFF9575FF).withOpacity(0.1),
+                          const Color(0xFF7C4DFF).withValues(alpha: 0.2),
+                          const Color(0xFF9575FF).withValues(alpha: 0.1),
                         ]
                       : [
-                          const Color(0xFF7C4DFF).withOpacity(0.1),
-                          const Color(0xFFB39DDB).withOpacity(0.05),
+                          const Color(0xFF7C4DFF).withValues(alpha: 0.1),
+                          const Color(0xFFB39DDB).withValues(alpha: 0.05),
                         ],
                 ),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isDark
-                      ? const Color(0xFF7C4DFF).withOpacity(0.3)
-                      : const Color(0xFF7C4DFF).withOpacity(0.2),
+                      ? const Color(0xFF7C4DFF).withValues(alpha: 0.3)
+                      : const Color(0xFF7C4DFF).withValues(alpha: 0.2),
                   width: 1.5,
                 ),
               ),
@@ -1644,7 +1643,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: borderColor.withOpacity(isDark ? 0.3 : 0.5),
+                        color: borderColor.withValues(alpha: isDark ? 0.3 : 0.5),
                         blurRadius: 15,
                         spreadRadius: 2,
                         offset: const Offset(0, 4),
@@ -1682,7 +1681,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                   BoxShadow(
                                     color: _ledColor(
                                       isPadTared,
-                                    ).withOpacity(0.8),
+                                    ).withValues(alpha: 0.8),
                                     blurRadius: isPadTared ? 10 : 4,
                                     spreadRadius: isPadTared ? 2 : 0,
                                   ),
@@ -1734,8 +1733,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                borderColor.withOpacity(0.2),
-                                borderColor.withOpacity(0.1),
+                                borderColor.withValues(alpha: 0.2),
+                                borderColor.withValues(alpha: 0.1),
                               ],
                             ),
                             borderRadius: BorderRadius.circular(16),
@@ -1758,14 +1757,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                borderColor.withOpacity(0.8),
-                                borderColor.withOpacity(0.6),
+                                borderColor.withValues(alpha: 0.8),
+                                borderColor.withValues(alpha: 0.6),
                               ],
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: borderColor.withOpacity(0.4),
+                                color: borderColor.withValues(alpha: 0.4),
                                 blurRadius: 8,
                                 offset: const Offset(0, 3),
                               ),
@@ -1848,7 +1847,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.08),
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
                     blurRadius: 18,
                     offset: const Offset(0, 8),
                   ),
@@ -1861,7 +1860,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF26A69A).withOpacity(0.18),
+                            color: const Color(0xFF26A69A).withValues(alpha: 0.18),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -1907,12 +1906,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                       (isDark
                                               ? const Color(0xFF3AAFA3)
                                               : const Color(0xFF22A295))
-                                          .withOpacity(0.5),
+                                          .withValues(alpha: 0.5),
                                   width: 1,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(
+                                    color: Colors.black.withValues(alpha: 
                                       isDark ? 0.28 : 0.06,
                                     ),
                                     blurRadius: 14,
@@ -1930,11 +1929,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                         (isDark
                                                 ? const Color(0xFF2E8B83)
                                                 : const Color(0xFF2AB3A3))
-                                            .withOpacity(0.25),
+                                            .withValues(alpha: 0.25),
                                         (isDark
                                                 ? const Color(0xFF1B2D3D)
                                                 : const Color(0xFFCCD8E6))
-                                            .withOpacity(isDark ? 0.35 : 0.3),
+                                            .withValues(alpha: isDark ? 0.35 : 0.3),
                                       ],
                                     ),
                                     shape: BoxShape.circle,
@@ -2045,7 +2044,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         (isDark
                                 ? const Color(0xFF0E7C6B)
                                 : const Color(0xFF00BFA5))
-                            .withOpacity(0.35),
+                            .withValues(alpha: 0.35),
                     blurRadius: 15,
                     offset: const Offset(0, 6),
                   ),
@@ -2184,17 +2183,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   end: Alignment.bottomRight,
                   colors: isDark
                       ? [
-                          const Color(0xFF7C4DFF).withOpacity(0.3),
-                          const Color(0xFF9575FF).withOpacity(0.2),
+                          const Color(0xFF7C4DFF).withValues(alpha: 0.3),
+                          const Color(0xFF9575FF).withValues(alpha: 0.2),
                         ]
                       : [
-                          const Color(0xFF7C4DFF).withOpacity(0.1),
-                          const Color(0xFFB39DDB).withOpacity(0.05),
+                          const Color(0xFF7C4DFF).withValues(alpha: 0.1),
+                          const Color(0xFFB39DDB).withValues(alpha: 0.05),
                         ],
                 ),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: const Color(0xFF7C4DFF).withOpacity(0.5),
+                  color: const Color(0xFF7C4DFF).withValues(alpha: 0.5),
                   width: 2,
                 ),
               ),
@@ -2571,12 +2570,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             prefixIcon: const Icon(Icons.search),
                             filled: true,
                             fillColor: isDark
-                                ? cs.surfaceVariant.withOpacity(0.25)
-                                : cs.surfaceVariant.withOpacity(0.8),
+                                ? cs.surfaceVariant.withValues(alpha: 0.25)
+                                : cs.surfaceVariant.withValues(alpha: 0.8),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide(
-                                color: cs.outlineVariant.withOpacity(0.5),
+                                color: cs.outlineVariant.withValues(alpha: 0.5),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
@@ -2622,7 +2621,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           child: Text(
                             'Aucun favori pour cette recherche',
                             style: TextStyle(
-                              color: cs.onSurface.withOpacity(0.7),
+                              color: cs.onSurface.withValues(alpha: 0.7),
                             ),
                           ),
                         )

@@ -27,4 +27,11 @@ class PadsConfigNotifier extends StateNotifier<Map<Pad, PadConfig>> {
     state = next;
     save();
   }
+
+  void updateConfig(Map<Pad, PadConfig> next) {
+    state = next;
+    save();
+  }
+
+  Map<Pad, PadConfig> getConfig() => state;
 }

@@ -145,10 +145,10 @@ class RecipesSheet extends ConsumerWidget {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
+                              color: Colors.green.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: Colors.green.withOpacity(0.3),
+                                color: Colors.green.withValues(alpha: 0.3),
                                 width: 1,
                               ),
                             ),
@@ -212,12 +212,12 @@ class DashboardPage extends ConsumerStatefulWidget {
 /// - La navigation entre les onglets.
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   final TextEditingController _injectCtrl = TextEditingController();
-  List<Recipe>? _lastRecipes;
+ 
   final BleDeviceConnector _bleConnector = BleDeviceConnector();
   bool _bleConnected = false;
   String _lastBleMessage = '';
   DateTime? _lastBleTs;
-  int _bleDeltaMs = 0;
+
   late final Map<Pad, TextEditingController> _nameCtrls;
   int _currentTabIndex = 0;
 
@@ -245,12 +245,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       return next;
     });
     // LED taré = true si poids == 0
-    final current = ref.read(padsConfigProvider.notifier).state;
-    final next = Map<Pad, PadConfig>.from(current);
-    next[pad] = (next[pad] ?? const PadConfig()).copyWith(
-      tared: (ref.read(padsProvider)[pad] ?? 0) == 0,
-    );
-    ref.read(padsConfigProvider.notifier).state = next;
+final notifier = ref.read(padsConfigProvider.notifier);
+final current = notifier.getConfig();
+final next = Map<Pad, PadConfig>.from(current);
+next[pad] = (next[pad] ?? const PadConfig()).copyWith(
+tared: (ref.read(padsProvider)[pad] ?? 0) == 0,
+);
+notifier.updateConfig(next);
   }
 
   /// Ouvre la boîte de dialogue de modification d'un profil utilisateur.
@@ -1322,11 +1323,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Connexion à $name...')),
                             );
-                            await _bleConnector.connectAndListen(
-                              deviceId: d.id,
-                              serviceId: serviceUuid,
-                              charId: charUuid,
-                              onLine: (raw) {
+await _bleConnector.connectAndListen(
+deviceId: d.id,
+serviceId: serviceUuid,
+txNotifyCharId: charUuid,
+onDisconnect: () {
+if (!mounted) return;
+ScaffoldMessenger.of(context).showSnackBar(
+const SnackBar(content: Text('Déconnecté de la balance')));
+},
+onLine: (raw) {
                                 if (!mounted) return;
 
                                 final now = DateTime.now();
@@ -1334,8 +1340,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                   _bleDeltaMs = now
                                       .difference(_lastBleTs!)
                                       .inMilliseconds;
-                                }
-                                _lastBleTs = now;
+_lastBleTs = now;
 
                                 if (!_bleConnected) {
                                   setState(() => _bleConnected = true);
@@ -1657,19 +1662,44 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ),
                 );
               }
-              return ListView.builder(
-                itemCount: favs.length,
-                itemBuilder: (_, i) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: ListTile(
-                        title: Text(
-                          favs[i].title,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+return ListView.builder(
+itemCount: favs.length,
+itemBuilder: (_, i) => Padding(
+padding: const EdgeInsets.only(bottom: 12),
+child: Hero(
+tag: 'recipe_${favs[i].id}',
+child: Card(
+elevation: 2,
+child: Padding(
+padding: const EdgeInsets.all(16),
+child: ListTile(
+onTap: () => Navigator.of(context).push(
+MaterialPageRoute(
+builder: (ctx) => Scaffold(
+appBar: AppBar(title: Text(favs[i].title)),
+body: SingleChildScrollView(
+child: Hero(
+tag: 'recipe_${favs[i].id}',
+child: Padding(
+padding: const EdgeInsets.all(16),
+child: Column(
+crossAxisAlignment: CrossAxisAlignment.start,
+children: [
+Text(favs[i].title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+const SizedBox(height: 12),
+Text(favs[i].description),
+],
+),
+),
+),
+),
+),
+),
+),
+title: Text(
+favs[i].title,
+style: const TextStyle(fontWeight: FontWeight.bold),
+),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
