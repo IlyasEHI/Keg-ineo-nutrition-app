@@ -1115,13 +1115,21 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   void _handleBleJson(String raw) {
     debugPrint('🔹 BLE RAW => $raw');
 
-    try {
-      final decoded = jsonDecode(raw);
+ try {
+ final decoded = jsonDecode(raw);
 
-      if (decoded is! Map<String, dynamic>) {
-        debugPrint('❌ BLE JSON: not a Map, got ${decoded.runtimeType}');
-        return;
-      }
+ if (decoded is! Map<String, dynamic>) {
+ debugPrint('❌ BLE JSON: not a Map, got ${decoded.runtimeType}');
+ return;
+ }
+
+ // Save weight to Hive
+ if (decoded.containsKey('weight')) {
+ final weight = decoded['weight'] is int
+ ? (decoded['weight'] as int).toDouble()
+ : decoded['weight'] as double;
+ WeightHistoryService.saveWeight(weight);
+ }
 
       // mapping zones → pads (robuste)
       final map = <Pad, int>{};
