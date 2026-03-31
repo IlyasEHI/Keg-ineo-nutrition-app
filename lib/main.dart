@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'models/weight_history.dart';
+import 'app.dart';
 import 'ui/dashboard_page.dart';
 import 'state/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Charge les variables d'environnement depuis .env (bundlé comme asset)
-  await dotenv.load(fileName: ".env");
+  await dotenv.load();
+
+  // Initialize Hive
+  await Hive.initFlutter();
+  Hive.registerAdapter(WeightHistoryAdapter());
+  await Hive.openBox<WeightHistory>('weight_history');
 
   runApp(const ProviderScope(child: MyApp()));
 }
