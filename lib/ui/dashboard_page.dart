@@ -1436,7 +1436,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('KEG\'INEO – Dashboard'),
+        title: SizedBox(
+          height: 34,
+          child: Image.asset(
+            'assets/images/kegineo_logo.png',
+            fit: BoxFit.fitHeight,
+            filterQuality: FilterQuality.high,
+          ),
+        ),
+        titleSpacing: 12,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
